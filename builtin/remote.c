@@ -28,6 +28,7 @@ static const char * const builtin_remote_usage[] = {
 	N_("git remote [-v | --verbose] show [-n] <name>"),
 	N_("git remote prune [-n | --dry-run] <name>"),
 	N_("git remote [-v | --verbose] update [-p | --prune] [(<group> | <remote>)...]"),
+	N_("git remote group"),
 	N_("git remote set-branches [--add] <name> <branch>..."),
 	N_("git remote get-url [--push] [--all] <name>"),
 	N_("git remote set-url [--push] <name> <newurl> [<oldurl>]"),
@@ -74,6 +75,11 @@ static const char * const builtin_remote_prune_usage[] = {
 
 static const char * const builtin_remote_update_usage[] = {
 	N_("git remote update [<options>] [<group> | <remote>]..."),
+	NULL
+};
+
+static const char * const builtin_remote_group_usage[] = {
+	N_("git remote group"),
 	NULL
 };
 
@@ -1634,6 +1640,46 @@ static int update(int argc, const char **argv, const char *prefix,
 	return run_command(&cmd);
 }
 
+static int get_remote_group(const char *key, const char *value UNUSED,
+			    const struct config_context *ctx UNUSED,
+			    void *priv)
+{
+	struct string_list *remote_group_list = priv;
+
+	if (skip_prefix(key, "remotes.", &key)) {
+		size_t wordlen = strlen(key);
+		if (wordlen >= 1)
+			string_list_append_nodup(remote_group_list,
+						xstrndup(key, wordlen));
+	}
+	string_list_remove_duplicates(remote_group_list, 0);
+
+	return 0;
+}
+
+static int group(int argc, const char **argv, const char *prefix,
+	struct repository *repo UNUSED)
+{
+	struct string_list remote_group_list = STRING_LIST_INIT_DUP;
+	struct option options[] = {
+		OPT_END()
+	};
+
+	argc = parse_options(argc, argv, prefix, options,
+		builtin_remote_group_usage, 0);
+	if (argc != 0)
+		usage_with_options(builtin_remote_group_usage, options);
+
+	git_config(get_remote_group, &remote_group_list);
+	for (int i = 0; i < remote_group_list.nr; i++) {
+		const char *name = remote_group_list.items[i].string;
+		printf_ln(_("%s"), name);
+	}
+	string_list_clear(&remote_group_list, 0);
+
+	return 0;
+}
+
 static int remove_all_fetch_refspecs(const char *key)
 {
 	return git_config_set_multivar_gently(key, NULL, NULL,
@@ -1845,6 +1891,7 @@ int cmd_remote(int argc,
 		OPT_SUBCOMMAND("show", &fn, show),
 		OPT_SUBCOMMAND("prune", &fn, prune),
 		OPT_SUBCOMMAND("update", &fn, update),
+		OPT_SUBCOMMAND("group", &fn, group),
 		OPT_END()
 	};
 

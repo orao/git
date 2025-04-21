@@ -1050,6 +1050,17 @@ __git_remotes ()
 	__git remote
 }
 
+__git_remote_groups ()
+{
+	__git remote group
+}
+
+__git_remotes_or_groups ()
+{
+	__git_remotes
+	__git_remote_groups
+}
+
 # Returns true if $1 matches the name of a configured remote, false otherwise.
 __git_is_configured_remote ()
 {
@@ -1181,7 +1192,10 @@ __git_complete_remote_or_refspec ()
 		((c++))
 	done
 	if [ -z "$remote" ]; then
-		__gitcomp_nl "$(__git_remotes)"
+		case "$cmd" in
+		push) __gitcomp_nl "$(__git_remotes)" ;;
+		*) __gitcomp_nl "$(__git_remotes_or_groups)" ;;
+		esac
 		return
 	fi
 	if [ $no_complete_refspec = 1 ]; then
@@ -3073,7 +3087,7 @@ _git_remote ()
 {
 	local subcommands="
 		add rename remove set-head set-branches
-		get-url set-url show prune update
+		get-url set-url show prune update group
 		"
 	local subcommand="$(__git_find_on_cmdline "$subcommands")"
 	if [ -z "$subcommand" ]; then
@@ -3108,6 +3122,9 @@ _git_remote ()
 		;;
 	update,*)
 		__gitcomp "$(__git_remotes) $(__git_get_config_variables "remotes")"
+		;;
+	group,--*)
+		__gitcomp_builtin remote_group
 		;;
 	set-url,--*)
 		__gitcomp_builtin remote_set-url
