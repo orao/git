@@ -22,6 +22,7 @@ SYNOPSIS
 'git remote' [-v | --verbose] 'show' [-n] <name>...
 'git remote prune' [-n | --dry-run] <name>...
 'git remote' [-v | --verbose] 'update' [-p | --prune] [(<group> | <remote>)...]
+'git remote group'
 
 DESCRIPTION
 -----------
@@ -197,6 +198,11 @@ be updated.  (See linkgit:git-config[1]).
 +
 With `--prune` option, run pruning against all the remotes that are updated.
 
+'group'::
+
+List all configured remote groups. The remote groups configuration is achieved
+using the `remotes.<group>` configuration variables.  (See
+linkgit:git-config[1]).
 
 DISCUSSION
 ----------
