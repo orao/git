@@ -31,6 +31,12 @@ repo_fetched() {
 	return 1
 }
 
+check_groups() {
+	echo $@ | sort >expected_groups;
+	git remote group | sort >listed_groups;
+	git diff --no-index --quiet expected_groups listed_groups
+}
+
 test_expect_success 'setup' '
 	mkdir one && (cd one && git init) &&
 	mkdir two && (cd two && git init) &&
@@ -64,6 +70,12 @@ test_expect_success 'updating group updates all members (remote update)' '
 	repo_fetched two
 '
 
+test_expect_success 'prints the configured group "all" once (remote group)' '
+	echo "all" >expect &&
+	test_expect_code 0 git remote group 1>actual &&
+	test_cmp expect actual
+'
+
 test_expect_success 'updating group updates all members (fetch)' '
 	mark fetch-group-all &&
 	update_repos &&
@@ -79,6 +91,15 @@ test_expect_success 'updating group does not update non-members (remote update)'
 	git remote update some &&
 	repo_fetched one &&
 	! repo_fetched two
+'
+
+test_expect_success 'prints configured groups "all" and "some" (remote group)' '
+	cat >expect <<-EOF &&
+	all
+	some
+	EOF
+	test_expect_code 0 git remote group 1>actual &&
+	test_cmp expect actual
 '
 
 test_expect_success 'updating group does not update non-members (fetch)' '
@@ -105,6 +126,16 @@ test_expect_success 'updating group in parallel with a duplicate remote does not
 	git config --add remotes.duplicate one &&
 	git -c fetch.parallel=2 remote update duplicate &&
 	repo_fetched one
+'
+
+test_expect_success 'groups are printed in order of configuration (remote group)' '
+	cat >expect <<-EOF &&
+	all
+	some
+	duplicate
+	EOF
+	test_expect_code 0 git remote group 1>actual &&
+	test_cmp expect actual
 '
 
 test_done
