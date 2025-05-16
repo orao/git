@@ -33,7 +33,7 @@ repo_fetched() {
 
 check_groups() {
 	echo $@ | sort >expected_groups;
-	git remote group | sort >listed_groups;
+	git remote group --list | sort >listed_groups;
 	git diff --no-index --quiet expected_groups listed_groups
 }
 
@@ -72,7 +72,7 @@ test_expect_success 'updating group updates all members (remote update)' '
 
 test_expect_success 'prints the configured group "all" once (remote group)' '
 	echo "all" >expect &&
-	test_expect_code 0 git remote group 1>actual &&
+	test_expect_code 0 git remote group --list 1>actual &&
 	test_cmp expect actual
 '
 
@@ -93,12 +93,21 @@ test_expect_success 'updating group does not update non-members (remote update)'
 	! repo_fetched two
 '
 
-test_expect_success 'prints configured groups "all" and "some" (remote group)' '
+test_expect_success 'prints configured groups "all" and "some" (remote group --list)' '
 	cat >expect <<-EOF &&
 	all
 	some
 	EOF
-	test_expect_code 0 git remote group 1>actual &&
+	test_expect_code 0 git remote group --list 1>actual &&
+	test_cmp expect actual
+'
+
+test_expect_success 'prints configured groups "all" and "some" verbosely (remote group --list --verbose)' '
+	cat >expect <<-EOF &&
+	all		one two
+	some		one
+	EOF
+	test_expect_code 0 git remote group --list --verbose 1>actual &&
 	test_cmp expect actual
 '
 
@@ -134,7 +143,7 @@ test_expect_success 'groups are printed in order of configuration (remote group)
 	some
 	duplicate
 	EOF
-	test_expect_code 0 git remote group 1>actual &&
+	test_expect_code 0 git remote group --list 1>actual &&
 	test_cmp expect actual
 '
 
