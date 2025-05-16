@@ -28,7 +28,11 @@ static const char * const builtin_remote_usage[] = {
 	N_("git remote [-v | --verbose] show [-n] <name>"),
 	N_("git remote prune [-n | --dry-run] <name>"),
 	N_("git remote [-v | --verbose] update [-p | --prune] [(<group> | <remote>)...]"),
-	N_("git remote group"),
+	N_("git remote [-v | --verbose] group --list"),
+	N_("git remote group --get <name>"),
+	N_("git remote group --set <name> <remote>..."),
+	N_("git remote group --rename <old> <new>"),
+	N_("git remote group --delete <name>"),
 	N_("git remote set-branches [--add] <name> <branch>..."),
 	N_("git remote get-url [--push] [--all] <name>"),
 	N_("git remote set-url [--push] <name> <newurl> [<oldurl>]"),
@@ -79,7 +83,11 @@ static const char * const builtin_remote_update_usage[] = {
 };
 
 static const char * const builtin_remote_group_usage[] = {
-	N_("git remote group"),
+	N_("git remote [-v | --verbose] group --list"),
+	N_("git remote group --get <name>"),
+	N_("git remote group --set <name> <remote>..."),
+	N_("git remote group --rename <old> <new>"),
+	N_("git remote group --delete <name>"),
 	NULL
 };
 
@@ -1640,19 +1648,41 @@ static int update(int argc, const char **argv, const char *prefix,
 	return run_command(&cmd);
 }
 
-static int get_remote_group(const char *key, const char *value UNUSED,
+struct remote_group_data {
+	const char *name;
+	struct string_list *list;
+	int max_width;
+};
+
+static void remote_group_data_list_util_clear(void *p, const char *str UNUSED)
+{
+	string_list_clear(p, 0);
+	free(p);
+}
+
+static int get_remote_group(const char *key, const char *value,
 			    const struct config_context *ctx UNUSED,
 			    void *priv)
 {
-	struct string_list *remote_group_list = priv;
+	struct remote_group_data* remote_group_data = priv;
+	struct string_list_item *item = NULL;
 
-	if (skip_prefix(key, "remotes.", &key)) {
-		size_t wordlen = strlen(key);
-		if (wordlen >= 1)
-			string_list_append_nodup(remote_group_list,
-						xstrndup(key, wordlen));
+	if (skip_prefix(key, "remotes.", &key) && (remote_group_data->name == NULL || !strcmp(key, remote_group_data->name))) {
+		size_t keylen = strlen(key);
+		if (keylen > remote_group_data->max_width)
+			remote_group_data->max_width = keylen;
+		if (keylen >= 1) {
+			item = unsorted_string_list_lookup(remote_group_data->list, key);
+			if (item == NULL) {
+				item = string_list_append_nodup(remote_group_data->list,
+							xstrndup(key, keylen));
+				item->util = xmalloc(sizeof(struct string_list));
+				string_list_init_dup(item->util);
+			}
+			string_list_split(item->util, value, ' ', -1); // Note: This differs from the original version that split by space, tab, and new line.
+			string_list_remove_empty_items(item->util, 0);
+		}
 	}
-	string_list_remove_duplicates(remote_group_list, 0);
 
 	return 0;
 }
@@ -1660,23 +1690,102 @@ static int get_remote_group(const char *key, const char *value UNUSED,
 static int group(int argc, const char **argv, const char *prefix,
 	struct repository *repo UNUSED)
 {
+	int list_mode = 0, get_mode = 0, set_mode = 0, rename_mode = 0, delete_mode = 0, result = 0;
 	struct string_list remote_group_list = STRING_LIST_INIT_DUP;
+	struct remote_group_data remote_group_data = { .list = &remote_group_list };
+	struct string_list* group_member_list = NULL;
+	struct strbuf add_buf = STRBUF_INIT;
+	struct strbuf val_buf = STRBUF_INIT;
+	struct strbuf rm_buf = STRBUF_INIT;
 	struct option options[] = {
+		OPT__VERBOSE(&verbose, N_("be verbose")),
+		OPT_BOOL_F('\0', "list", &list_mode,
+			N_("list group names"), PARSE_OPT_NONEG),
+		OPT_BOOL_F('\0', "get", &get_mode,
+			 N_("get group"), PARSE_OPT_NONEG),
+		OPT_BOOL_F('\0', "set", &set_mode,
+			 N_("set group"), PARSE_OPT_NONEG),
+		OPT_BOOL_F('\0', "rename", &rename_mode,
+			 N_("rename group"), PARSE_OPT_NONEG),
+		OPT_BOOL_F('\0', "delete", &delete_mode,
+			 N_("delete group"), PARSE_OPT_NONEG),
 		OPT_END()
 	};
 
 	argc = parse_options(argc, argv, prefix, options,
 		builtin_remote_group_usage, 0);
-	if (argc != 0)
+	
+	if ((argc != 0 && list_mode) ||
+	    (argc != 1 && (get_mode || delete_mode)) ||
+	    (argc != 2 && rename_mode) ||
+	    (argc < 2 && set_mode))
 		usage_with_options(builtin_remote_group_usage, options);
 
-	git_config(get_remote_group, &remote_group_list);
-	for (int i = 0; i < remote_group_list.nr; i++) {
-		const char *name = remote_group_list.items[i].string;
-		printf_ln(_("%s"), name);
-	}
-	string_list_clear(&remote_group_list, 0);
+	if (list_mode) {
+		git_config(get_remote_group, &remote_group_data);
+		for (int i = 0; i < remote_group_list.nr; i++) {
+			const char *group_name = remote_group_list.items[i].string;
+			if (verbose) {
+				printf(_("%-*s\t"), remote_group_data.max_width, group_name);
+				group_member_list = remote_group_list.items[i].util;
+				if (group_member_list->nr > 0) {
+					for (int j = 0; j < group_member_list->nr - 1; j++) {
+						const char *group_member_name = group_member_list->items[j].string;
+						printf(_("%s "), group_member_name);
+					}
+					printf_ln(_("%s"), group_member_list->items[group_member_list->nr - 1].string);
+				}
+			} else {
+				printf_ln(_("%s"), group_name);
+			}
+		}
+	} else if (get_mode) {
+		remote_group_data.name = argv[0];
+		git_config(get_remote_group, &remote_group_data);
+		if (remote_group_list.nr == 0) {
+			error(_("No such remote group '%s'"), remote_group_data.name);
+			exit(2);
+		}
+		group_member_list = remote_group_list.items[0].util;
+		if (group_member_list->nr > 0) {
+			for (int i = 0; i < group_member_list->nr; i++) {
+				const char *group_member_name = group_member_list->items[i].string;
+				printf_ln(_("%s"), group_member_name);
+			}
+		}
+		string_list_clear_func(remote_group_data.list, remote_group_data_list_util_clear);
+	} else if (set_mode) {
+		strbuf_addf(&add_buf, "remotes.%s", argv[0]);
+		strbuf_join_argv(&val_buf, argc - 1, &argv[1], ' ');
+	} else if (delete_mode) {
+		strbuf_addf(&rm_buf, "remotes.%s", argv[0]); // group name
+	} else if (rename_mode) {
+		remote_group_data.name = argv[0];
+		git_config(get_remote_group, &remote_group_data);
+		if (remote_group_list.nr == 0) {
+			error(_("No such remote group '%s'"), remote_group_data.name);
+			exit(2);
+		}
 
+		strbuf_addf(&rm_buf, "remotes.%s", argv[0]); // old name
+		strbuf_addf(&add_buf, "remotes.%s", argv[1]); // new name
+		strbuf_add_separated_string_list(&val_buf, " ", remote_group_list.items[0].util); // group members
+	}
+
+	if (set_mode || rename_mode) {
+		result = git_config_set_multivar_gently(add_buf.buf, val_buf.buf, ".*", CONFIG_FLAGS_MULTI_REPLACE);
+		if (result && result != CONFIG_NOTHING_SET)
+			die(_("could not set '%s'"), add_buf.buf);
+	}
+	if (delete_mode || rename_mode) {
+		git_config_set_multivar(rm_buf.buf, NULL, ".*",
+					CONFIG_FLAGS_MULTI_REPLACE);
+	}
+
+	string_list_clear_func(remote_group_data.list, remote_group_data_list_util_clear);
+	strbuf_release(&add_buf);
+	strbuf_release(&val_buf);
+	strbuf_release(&rm_buf);
 	return 0;
 }
 
