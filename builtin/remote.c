@@ -1649,8 +1649,8 @@ static int update(int argc, const char **argv, const char *prefix,
 }
 
 struct remote_group_data {
-	const char *name;
-	struct string_list *list;
+	const char *name_filter;
+	struct string_list *group_list;
 	int max_width;
 };
 
@@ -1667,14 +1667,14 @@ static int get_remote_group(const char *key, const char *value,
 	struct remote_group_data* remote_group_data = priv;
 	struct string_list_item *item = NULL;
 
-	if (skip_prefix(key, "remotes.", &key) && (remote_group_data->name == NULL || !strcmp(key, remote_group_data->name))) {
+	if (skip_prefix(key, "remotes.", &key) && (remote_group_data->name_filter == NULL || !strcmp(key, remote_group_data->name_filter))) {
 		size_t keylen = strlen(key);
 		if (keylen > remote_group_data->max_width)
 			remote_group_data->max_width = keylen;
 		if (keylen >= 1) {
-			item = unsorted_string_list_lookup(remote_group_data->list, key);
+			item = unsorted_string_list_lookup(remote_group_data->group_list, key);
 			if (item == NULL) {
-				item = string_list_append_nodup(remote_group_data->list,
+				item = string_list_append_nodup(remote_group_data->group_list,
 							xstrndup(key, keylen));
 				item->util = xmalloc(sizeof(struct string_list));
 				string_list_init_dup(item->util);
@@ -1692,11 +1692,13 @@ static int group(int argc, const char **argv, const char *prefix,
 {
 	int list_mode = 0, get_mode = 0, set_mode = 0, rename_mode = 0, delete_mode = 0, result = 0;
 	struct string_list remote_group_list = STRING_LIST_INIT_DUP;
-	struct remote_group_data remote_group_data = { .list = &remote_group_list };
+	struct remote_group_data remote_group_data = { .group_list = &remote_group_list };
 	struct string_list* group_member_list = NULL;
+	struct string_list_item *group_item, *member_item;
 	struct strbuf add_buf = STRBUF_INIT;
 	struct strbuf val_buf = STRBUF_INIT;
 	struct strbuf rm_buf = STRBUF_INIT;
+	const char* sep = NULL;
 	struct option options[] = {
 		OPT__VERBOSE(&verbose, N_("be verbose")),
 		OPT_BOOL_F('\0', "list", &list_mode,
@@ -1723,27 +1725,29 @@ static int group(int argc, const char **argv, const char *prefix,
 
 	if (list_mode) {
 		git_config(get_remote_group, &remote_group_data);
-		for (int i = 0; i < remote_group_list.nr; i++) {
-			const char *group_name = remote_group_list.items[i].string;
+		for_each_string_list_item(group_item, &remote_group_list) {
+			const char *group_name = group_item->string;
 			if (verbose) {
 				printf(_("%-*s\t"), remote_group_data.max_width, group_name);
-				group_member_list = remote_group_list.items[i].util;
+				group_member_list = group_item->util;
 				if (group_member_list->nr > 0) {
-					for (int j = 0; j < group_member_list->nr - 1; j++) {
-						const char *group_member_name = group_member_list->items[j].string;
-						printf(_("%s "), group_member_name);
+					sep = "";
+					for_each_string_list_item(member_item, group_member_list)  {
+						const char *group_member_name = member_item->string;
+						printf(_("%s%s"), sep, group_member_name);
+						sep=" ";
 					}
-					printf_ln(_("%s"), group_member_list->items[group_member_list->nr - 1].string);
+					printf(_("\n"));
 				}
 			} else {
 				printf_ln(_("%s"), group_name);
 			}
 		}
 	} else if (get_mode) {
-		remote_group_data.name = argv[0];
+		remote_group_data.name_filter = argv[0];
 		git_config(get_remote_group, &remote_group_data);
 		if (remote_group_list.nr == 0) {
-			error(_("No such remote group '%s'"), remote_group_data.name);
+			error(_("No such remote group '%s'"), remote_group_data.name_filter);
 			exit(2);
 		}
 		group_member_list = remote_group_list.items[0].util;
@@ -1753,17 +1757,17 @@ static int group(int argc, const char **argv, const char *prefix,
 				printf_ln(_("%s"), group_member_name);
 			}
 		}
-		string_list_clear_func(remote_group_data.list, remote_group_data_list_util_clear);
+		string_list_clear_func(remote_group_data.group_list, remote_group_data_list_util_clear);
 	} else if (set_mode) {
 		strbuf_addf(&add_buf, "remotes.%s", argv[0]);
 		strbuf_join_argv(&val_buf, argc - 1, &argv[1], ' ');
 	} else if (delete_mode) {
 		strbuf_addf(&rm_buf, "remotes.%s", argv[0]); // group name
 	} else if (rename_mode) {
-		remote_group_data.name = argv[0];
+		remote_group_data.name_filter = argv[0];
 		git_config(get_remote_group, &remote_group_data);
 		if (remote_group_list.nr == 0) {
-			error(_("No such remote group '%s'"), remote_group_data.name);
+			error(_("No such remote group '%s'"), remote_group_data.name_filter);
 			exit(2);
 		}
 
@@ -1782,7 +1786,7 @@ static int group(int argc, const char **argv, const char *prefix,
 					CONFIG_FLAGS_MULTI_REPLACE);
 	}
 
-	string_list_clear_func(remote_group_data.list, remote_group_data_list_util_clear);
+	string_list_clear_func(remote_group_data.group_list, remote_group_data_list_util_clear);
 	strbuf_release(&add_buf);
 	strbuf_release(&val_buf);
 	strbuf_release(&rm_buf);

@@ -104,11 +104,11 @@ test_expect_success 'prints configured groups "all" and "some" (remote group --l
 
 test_expect_success 'prints configured groups "all" and "some" verbosely (remote group --list --verbose)' '
 	cat >expect <<-EOF &&
-	all		one two
-	some		one
+	all 	one two
+	some	one
 	EOF
 	test_expect_code 0 git remote group --list --verbose 1>actual &&
-	test_cmp expect actual
+	test_cmp expect1 actual1
 '
 
 test_expect_success 'updating group does not update non-members (fetch)' '
