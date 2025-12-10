@@ -147,4 +147,14 @@ test_expect_success 'groups are printed in order of configuration (remote group)
 	test_cmp expect actual
 '
 
+test_expect_success 'local config group overrides global config group (fetch)' '
+	mark fetch-group-override &&
+	update_repo one &&
+	git config --global --add remotes.override one &&
+	git config --add remotes.override two &&
+	git remote update override &&
+	repo_fetched two &&
+	! repo_fetched one
+'
+
 test_done

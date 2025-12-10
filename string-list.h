@@ -278,7 +278,14 @@ void unsorted_string_list_delete_item(struct string_list *list, int i, int free_
 int string_list_split(struct string_list *list, const char *string,
 		      const char *delim, int maxsplit);
 
-/*
+/**
+ * Like string_list_split(), except that multiple delimiters can be
+ * specified using the `delim` string.
+ */
+int string_list_split_by_delims(struct string_list *list, const char *string,
+		      const char* delims, int maxsplit);
+
+/**
  * Like string_list_split(), except that string is split in-place: the
  * delimiter characters in string are overwritten with NULs, and the
  * new string_list_items point into string (which therefore must not
