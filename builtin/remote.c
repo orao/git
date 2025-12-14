@@ -1890,7 +1890,8 @@ static int group(int argc, const char **argv, const char *prefix,
 
 		strbuf_addf(&rm_buf, "remotes.%s", argv[0]); // old name
 		strbuf_addf(&add_buf, "remotes.%s", argv[1]); // new name
-		strbuf_add_separated_string_list(&val_buf, " ", lookup_context.groups.items[0].util); // group members
+		group_info = lookup_context.groups.items[0].util;
+		strbuf_add_separated_string_list(&val_buf, " ", &group_info->members); // group members
 	}
 
 	if (set_mode || rename_mode) {
