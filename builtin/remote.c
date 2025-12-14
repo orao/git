@@ -1811,7 +1811,7 @@ static int group(int argc, const char **argv, const char *prefix,
 {
 	int list_mode = 0, get_mode = 0, set_mode = 0, rename_mode = 0, delete_mode = 0, result = 0;
 	struct remote_group_lookup_context lookup_context = REMOTE_GROUP_LOOKUP_CONTEXT_INIT;
-	struct string_list* group_member_list = NULL;
+	struct remote_group_info *group_info = NULL;
 	struct string_list_item *group_item, *member_item;
 	struct strbuf add_buf = STRBUF_INIT;
 	struct strbuf val_buf = STRBUF_INIT;
@@ -1847,10 +1847,10 @@ static int group(int argc, const char **argv, const char *prefix,
 			const char *group_name = group_item->string;
 			if (verbose) {
 				printf(_("%-*s\t"), lookup_context.max_width, group_name);
-				group_member_list = group_item->util;
-				if (group_member_list->nr > 0) {
+				group_info = group_item->util;
+				if (group_info->members.nr > 0) {
 					sep = "";
-					for_each_string_list_item(member_item, group_member_list)  {
+					for_each_string_list_item(member_item, &group_info->members)  {
 						const char *group_member_name = member_item->string;
 						printf(_("%s%s"), sep, group_member_name);
 						sep=" ";
@@ -1868,10 +1868,10 @@ static int group(int argc, const char **argv, const char *prefix,
 			error(_("No such remote group '%s'"), lookup_context.name_filter);
 			exit(2);
 		}
-		group_member_list = lookup_context.groups.items[0].util;
-		if (group_member_list->nr > 0) {
-			for (size_t i = 0; i < group_member_list->nr; i++) {
-				const char *group_member_name = group_member_list->items[i].string;
+		group_info = lookup_context.groups.items[0].util;
+		if (group_info->members.nr > 0) {
+			for_each_string_list_item(member_item, &group_info->members)  {
+				const char *group_member_name = member_item->string;
 				printf_ln(_("%s"), group_member_name);
 			}
 		}
